@@ -769,7 +769,7 @@ function parseSheet(sheet, fileName) {
         const currencyCell = sheet[XLSX.utils.encode_cell({ r, c: 9 })]; // Column J (index 9)
 
         const vendor = vendorCell ? String(vendorCell.v || '').trim() : '';
-        const channel = channelCell ? String(channelCell.v || '').trim() : '';
+        const channel = channelCell ? String(channelCell.v || '').trim().replace(/\u00e2\u0080\u0099|‚Äô/g, "'") : '';
         const amount = amountCell ? parseFloat(amountCell.v) : NaN;
         const currency = currencyCell ? String(currencyCell.v || '').trim().toUpperCase() : '';
 
