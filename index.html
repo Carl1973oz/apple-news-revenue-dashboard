@@ -708,7 +708,7 @@
             <label class="filter-label">View</label>
             <div class="view-toggle">
                 <button class="view-toggle-btn active" data-view="detail">Detail</button>
-                <button class="view-toggle-btn" data-view="vendor">By Vendor</button>
+                <button class="view-toggle-btn" data-view="currency">By Currency</button>
                 <button class="view-toggle-btn" data-view="channel">By Channel</button>
             </div>
         </div>
@@ -1045,9 +1045,9 @@ function renderReport() {
 
 // ─── Chart Visualisation ──────────────────────────────────────────────────
 function renderChart(rows) {
-    const groupKey = state.currentView === 'channel' ? 'channel' : 'vendor';
-    const title = state.currentView === 'channel' ? 'Revenue by Channel (AUD)' : 'Revenue by Vendor (AUD)';
-    document.getElementById('chartTitle').textContent = title;
+    const groupKey = state.currentView === 'channel' ? 'channel' : state.currentView === 'currency' ? 'currency' : 'vendor';
+    const titles = { channel: 'Revenue by Channel (AUD)', currency: 'Revenue by Currency (AUD)', vendor: 'Revenue by Vendor (AUD)' };
+    document.getElementById('chartTitle').textContent = titles[groupKey] || titles.vendor;
 
     // Aggregate
     const groups = {};
@@ -1075,7 +1075,7 @@ function renderChart(rows) {
 function renderTable(rows) {
     const view = state.currentView;
 
-    if (view === 'vendor' || view === 'channel') {
+    if (view === 'currency' || view === 'channel') {
         renderAggregatedTable(rows, view);
     } else {
         renderDetailTable(rows);
@@ -1221,7 +1221,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
 
     const view = state.currentView;
 
-    if (view === 'vendor' || view === 'channel') {
+    if (view === 'currency' || view === 'channel') {
         // Export aggregated
         const groups = {};
         state.filteredRows.forEach(r => {
