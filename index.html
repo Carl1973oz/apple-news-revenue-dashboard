@@ -592,6 +592,64 @@
             font-size: 16px;
         }
 
+        /* ─── Pivot Table ─────────────────────────────────────── */
+        .pivot-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .pivot-table thead th {
+            background: var(--bg-secondary);
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-light);
+            text-align: right;
+        }
+
+        .pivot-table thead th:first-child {
+            text-align: left;
+        }
+
+        .pivot-table tbody td {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border-light);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pivot-table tbody td:first-child {
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .pivot-table tbody tr:hover {
+            background: var(--bg-secondary);
+        }
+
+        .pivot-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .pivot-table .totals-row td {
+            background: #FFFDE6;
+            font-weight: 700;
+            border-top: 2px solid var(--border);
+        }
+
+        .pivot-table .totals-row td:first-child {
+            color: var(--text-primary);
+        }
+
+        .pivot-table .totals-col {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
         /* ─── Empty State ────────────────────────────────────── */
         .empty-state {
             text-align: center;
@@ -710,6 +768,7 @@
                 <button class="view-toggle-btn active" data-view="detail">Detail</button>
                 <button class="view-toggle-btn" data-view="currency">By Currency</button>
                 <button class="view-toggle-btn" data-view="channel">By Channel</button>
+                <button class="view-toggle-btn" data-view="pivot">Pivot</button>
             </div>
         </div>
     </section>
@@ -748,7 +807,7 @@
         </div>
         <div class="table-container">
             <table>
-                <thead>
+                <thead data-standard>
                     <tr>
                         <th data-sort="vendor">Vendor <span class="sort-icon">↕</span></th>
                         <th data-sort="channel">Channel <span class="sort-icon">↕</span></th>
@@ -1075,7 +1134,9 @@ function renderChart(rows) {
 function renderTable(rows) {
     const view = state.currentView;
 
-    if (view === 'currency' || view === 'channel') {
+    if (view === 'pivot') {
+        renderPivotTable(rows);
+    } else if (view === 'currency' || view === 'channel') {
         renderAggregatedTable(rows, view);
     } else {
         renderDetailTable(rows);
@@ -1083,6 +1144,9 @@ function renderTable(rows) {
 }
 
 function renderDetailTable(rows) {
+    // Restore normal table structure if coming from pivot
+    restoreTableStructure();
+
     // Apply sort
     const sorted = [...rows].sort((a, b) => {
         const col = state.sortColumn;
@@ -1136,6 +1200,8 @@ function renderDetailTable(rows) {
 }
 
 function renderAggregatedTable(rows, groupBy) {
+    // Restore normal table structure if coming from pivot
+    restoreTableStructure();
     const groups = {};
     rows.forEach(r => {
         const key = r[groupBy] || '(unnamed)';
@@ -1182,6 +1248,88 @@ function renderAggregatedTable(rows, groupBy) {
     `;
 }
 
+// ─── Restore Table Structure (after pivot) ────────────────────────────────
+function restoreTableStructure() {
+    const tableContainer = document.querySelector('.table-container');
+    // If pivot replaced the table, restore the standard structure
+    if (!tableContainer.querySelector('thead[data-standard]')) {
+        tableContainer.innerHTML = `
+            <table>
+                <thead data-standard>
+                    <tr>
+                        <th data-sort="vendor">Vendor <span class="sort-icon">↕</span></th>
+                        <th data-sort="channel">Channel <span class="sort-icon">↕</span></th>
+                        <th data-sort="audAmount" style="text-align:right">Share Amount (AUD) <span class="sort-icon">↕</span></th>
+                        <th data-sort="amount" style="text-align:right">Original Amount <span class="sort-icon">↕</span></th>
+                        <th data-sort="currency">Currency <span class="sort-icon">↕</span></th>
+                        <th data-sort="source">Source File <span class="sort-icon">↕</span></th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        `;
+    }
+}
+
+// ─── Pivot Table ──────────────────────────────────────────────────────────
+function renderPivotTable(rows) {
+    const currencies = ['AUD', 'USD', 'CAD', 'GBP'];
+    const currencyLabels = { AUD: 'AU', USD: 'US', CAD: 'CA', GBP: 'UK' };
+
+    // Build pivot: channel → { AUD: sum, USD: sum, ... }
+    const pivot = {};
+    rows.forEach(r => {
+        const ch = r.channel || '(unnamed)';
+        if (!pivot[ch]) pivot[ch] = { AUD: 0, USD: 0, CAD: 0, GBP: 0, total: 0 };
+        pivot[ch][r.currency] += r.audAmount;
+        pivot[ch].total += r.audAmount;
+    });
+
+    // Sort channels by total descending
+    const sorted = Object.entries(pivot).sort((a, b) => b[1].total - a[1].total);
+
+    // Column totals
+    const colTotals = { AUD: 0, USD: 0, CAD: 0, GBP: 0, total: 0 };
+    sorted.forEach(([, data]) => {
+        currencies.forEach(c => colTotals[c] += data[c]);
+        colTotals.total += data.total;
+    });
+
+    document.querySelector('.table-title').textContent = 'Revenue by Channel & Currency (AUD)';
+
+    // Render as pivot table (replace normal table content)
+    const tableContainer = document.querySelector('.table-container');
+    tableContainer.innerHTML = `
+        <table class="pivot-table">
+            <thead>
+                <tr>
+                    <th>Channel Name</th>
+                    ${currencies.map(c => `<th>${currencyLabels[c]}</th>`).join('')}
+                    <th>TOTALS</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${sorted.map(([channel, data]) => `
+                    <tr>
+                        <td>${escapeHTML(channel)}</td>
+                        ${currencies.map(c => `<td>${data[c] > 0 ? formatPivotCell(data[c]) : '—'}</td>`).join('')}
+                        <td class="totals-col">${formatPivotCell(data.total)}</td>
+                    </tr>
+                `).join('')}
+                <tr class="totals-row">
+                    <td>TOTALS</td>
+                    ${currencies.map(c => `<td>${formatPivotCell(colTotals[c])}</td>`).join('')}
+                    <td class="totals-col">${formatPivotCell(colTotals.total)}</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+}
+
+function formatPivotCell(amount) {
+    return '$ ' + amount.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // ─── Sortable Columns ─────────────────────────────────────────────────────
 function attachSortListeners() {
     document.querySelectorAll('thead th[data-sort]').forEach(th => {
@@ -1221,7 +1369,33 @@ document.getElementById('btnExport').addEventListener('click', () => {
 
     const view = state.currentView;
 
-    if (view === 'currency' || view === 'channel') {
+    if (view === 'pivot') {
+        // Export pivot table
+        const currencies = ['AUD', 'USD', 'CAD', 'GBP'];
+        const currencyLabels = { AUD: 'AU', USD: 'US', CAD: 'CA', GBP: 'UK' };
+        const pivot = {};
+        state.filteredRows.forEach(r => {
+            const ch = r.channel || '(unnamed)';
+            if (!pivot[ch]) pivot[ch] = { AUD: 0, USD: 0, CAD: 0, GBP: 0, total: 0 };
+            pivot[ch][r.currency] += r.audAmount;
+            pivot[ch].total += r.audAmount;
+        });
+        const sorted = Object.entries(pivot).sort((a, b) => b[1].total - a[1].total);
+        const colTotals = { AUD: 0, USD: 0, CAD: 0, GBP: 0, total: 0 };
+        sorted.forEach(([, data]) => {
+            currencies.forEach(c => colTotals[c] += data[c]);
+            colTotals.total += data.total;
+        });
+
+        const headers = ['Channel Name', ...currencies.map(c => currencyLabels[c]), 'TOTALS'];
+        const csvRows = sorted.map(([name, data]) => [
+            `"${name}"`,
+            ...currencies.map(c => data[c].toFixed(2)),
+            data.total.toFixed(2)
+        ]);
+        csvRows.push(['"TOTALS"', ...currencies.map(c => colTotals[c].toFixed(2)), colTotals.total.toFixed(2)]);
+        downloadCSV(headers, csvRows, 'revenue_pivot');
+    } else if (view === 'currency' || view === 'channel') {
         // Export aggregated
         const groups = {};
         state.filteredRows.forEach(r => {
